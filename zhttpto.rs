@@ -10,6 +10,7 @@ extern mod extra;
 use extra::uv;
 use extra::{net_ip, net_tcp};
 use std::str;
+use std::path;
 
 static mut visitor_count: int = 0;
 
@@ -41,30 +42,32 @@ unsafe fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: 
 			let first_split = request_str.find_str("/");
 			let second_split = request_str.find_str("HTTP");
 			let file_name = request_str.slice(first_split.unwrap()+1, second_split.unwrap()-1);
-			let current_directory = std::os::getcwd();
-			let file_path: Path = current_directory.push(file_name);
 			
-			let fileReader: Result<@Reader, ~str> = std::io::file_reader(&file_path);
+			let fileReader: Result<@Reader, ~str> = std::io::file_reader(~path::Path(file_name));
 			let mut file_lines: ~[~str];
 			match fileReader {
 				Ok(reader) => {file_lines = reader.read_lines();}
-				Err(msg) => {file_lines = ~[];}//fail!("Cannot open file");}
+				Err(msg) => {file_lines = ~[];}
 			}
+		
 			
 			visitor_count+=1;
                         println(fmt!("Request received:\n%sVisitor Requests: %? ", request_str, visitor_count));
 
 			let mut vec_iterator = file_lines.iter();
-			loop {
-				match vec_iterator.next() {
-					Some(pattern) => {println(fmt!("%s", *pattern));}
-					None => {break;}
-				}
+			let mut file_strings = ~"";
+			for vec_iterator.advance() |x| {
+				file_strings.push_str(*x);
+				file_strings.push_str("\n");
 			}
+			println(fmt!("%s", file_strings));
+			
+			
+			if file_strings.is_empty(){
                         let response: ~str = ~
                             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
                              <doctype !html><html><head><title>Hello, Rust!</title>
-                             <style>body { backgound-color: #111; color: #FFEEAA }
+                             <style>body { background-color: #111; color: #FFEEAA }
                                     h1 { font-size:2cm; text-align: center; color: black; text-shadow: 0 0 4mm red}
                              </style></head>
                              <body>
@@ -72,6 +75,11 @@ unsafe fn new_connection_callback(new_conn :net_tcp::TcpNewConnection, _killch: 
                              </body></html>\r\n";
 
                         net_tcp::write(&sock, response.as_bytes_with_null_consume());
+			}
+			else {
+				let response: ~str = file_strings;
+				net_tcp::write(&sock, response.as_bytes_with_null_consume());		
+			}
                     },
                 };
             }
